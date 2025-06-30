@@ -1,0 +1,21 @@
+{
+    "alpaca_credentials": {
+        "api_key": "PK625UDWBLK1FQ5XAVIH",
+        "secret_key": "0s1x9Ta5uQ7UrxyDBXsBXttSBNAmHP8qtn8wMQXD",
+        "base_url": "https://paper-api.alpaca.markets"
+    },
+    "model_config": {
+        "sequence_length": 60,
+        "lstm_units": [64, 32],
+        "dropout_rate": 0.2,
+        "learning_rate": 0.001,
+        "epochs": 100,
+        "batch_size": 32
+    },
+    "data_config": {
+        "timeframe": "Day",
+        "features": ["close", "volume", "sma_20", "rsi", "macd", "volatility"],
+        "train_split": 0.8
+    },
+    "symbols": ["AAPL", "GOOGL", "MSFT", "NVDL", "SPY"]
+}

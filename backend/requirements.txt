@@ -1,3 +1,4 @@
+# Existing requirements...
 # Updated requirements.txt for Python 3.13 compatibility
 flask==3.1.1
 flask-cors==4.0.0
@@ -6,6 +7,13 @@ numpy>=2.0.0
 scikit-learn>=1.5.0
 alpaca-trade-api==3.2.0
 python-dotenv==1.0.0
+scipy>=1.14.0
+matplotlib>=3.8.0
+
+# New requirements for Portfolio Guardian
+textblob==0.17.1
+praw==7.6.1  # Reddit API
+yfinance==0.2.18  # For ticker validation
 
 # Additional dependencies for backtesting
 scipy>=1.14.0

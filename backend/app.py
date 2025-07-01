@@ -19,6 +19,12 @@ import json
 import traceback
 import logging
 
+from walk_forward_backtest import WalkForwardBacktester
+from portfolio_guardian import PortfolioGuardian, AlertSeverity
+from volatility_predictor import VolatilityPredictor
+from sentiment_analyzer import SocialSentimentAnalyzer
+
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -266,6 +272,26 @@ else:
     except Exception as e:
         logger.error(f"❌ Failed to initialize predictor: {e}")
         predictor = None
+
+guardian = None
+if predictor:
+    try:
+        # Initialize Portfolio Guardian
+        # Note: Reddit credentials are optional - will use mock data without them
+        reddit_creds = {
+            'client_id': os.getenv('REDDIT_CLIENT_ID'),
+            'client_secret': os.getenv('REDDIT_CLIENT_SECRET')
+        }
+        
+        guardian = PortfolioGuardian(
+            API_KEY, SECRET_KEY, BASE_URL,
+            reddit_credentials=reddit_creds if reddit_creds['client_id'] else None
+        )
+        logger.info("✅ Portfolio Guardian initialized successfully")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize Portfolio Guardian: {e}")
+        guardian = None
+
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
@@ -584,6 +610,340 @@ def debug_json():
     safe_data = safe_json_convert(test_data)
     return jsonify(safe_data)
 
+# Updated full backtest endpoint
+@app.route('/api/backtest', methods=['POST'])
+def backtest():
+    """Run walk-forward backtest with robust JSON handling"""
+    if not predictor:
+        return jsonify({'error': 'Predictor not initialized. Check API credentials.'}), 500
+    
+    try:
+        data = request.get_json()
+        symbols = data.get('symbols', ['AAPL', 'SPY', 'QQQ'])
+        
+        if len(symbols) > 10:
+            return jsonify({'error': 'Maximum 10 symbols allowed'}), 400
+        
+        logger.info(f"Running backtests for {symbols}")
+        
+        from walk_forward_backtest import WalkForwardBacktester
+        backtester = WalkForwardBacktester(API_KEY, SECRET_KEY, BASE_URL)
+        
+        # Run backtests
+        results = backtester.test_multiple_symbols(symbols)
+        
+        if not results:
+            return jsonify({'error': 'No successful backtests completed'}), 500
+        
+        # Process results with explicit type conversion
+        formatted_results = []
+        profitable_count = 0
+        edge_count = 0
+        
+        for symbol, metrics in results.items():
+            print(f"🔍 Processing {symbol} metrics...")
+            
+            # Convert each field explicitly
+            symbol_str = str(symbol)
+            total_return = float(metrics['total_return']) if not np.isnan(metrics['total_return']) else 0.0
+            annual_return = float(metrics['annual_return']) if not np.isnan(metrics['annual_return']) else 0.0
+            sharpe_ratio = float(metrics['sharpe_ratio']) if not np.isnan(metrics['sharpe_ratio']) else 0.0
+            win_rate = float(metrics['win_rate']) if not np.isnan(metrics['win_rate']) else 0.0
+            max_drawdown = float(metrics['max_drawdown']) if not np.isnan(metrics['max_drawdown']) else 0.0
+            total_trades = int(metrics['total_trades'])
+            profit_factor = float(metrics['profit_factor']) if not np.isnan(metrics['profit_factor']) else 0.0
+            kelly_fraction = float(metrics['kelly_fraction']) if not np.isnan(metrics['kelly_fraction']) else 0.0
+            final_value = float(metrics['final_value']) if not np.isnan(metrics['final_value']) else 5000.0
+            time_in_market = float(metrics['time_in_market']) if not np.isnan(metrics['time_in_market']) else 0.0
+            
+            # Calculate booleans as pure Python types
+            is_profitable = bool(total_return > 0.0)
+            has_edge = bool(sharpe_ratio > 1.0 and total_return > 0.1 and win_rate > 0.5)
+            
+            if is_profitable:
+                profitable_count += 1
+            if has_edge:
+                edge_count += 1
+            
+            # Build result record
+            result_record = {
+                'symbol': symbol_str,
+                'total_return': total_return,
+                'annual_return': annual_return,
+                'sharpe_ratio': sharpe_ratio,
+                'win_rate': win_rate,
+                'max_drawdown': max_drawdown,
+                'total_trades': total_trades,
+                'profit_factor': profit_factor,
+                'kelly_fraction': kelly_fraction,
+                'final_value': final_value,
+                'is_profitable': is_profitable,
+                'has_edge': has_edge,
+                'time_in_market': time_in_market
+            }
+            
+            # Test this record
+            if not test_json_serialization(result_record, f"{symbol} record"):
+                result_record = safe_json_convert(result_record)
+            
+            formatted_results.append(result_record)
+        
+        # Sort by Sharpe ratio
+        formatted_results.sort(key=lambda x: x['sharpe_ratio'], reverse=True)
+        
+        # Build summary
+        best_performer = formatted_results[0] if formatted_results else None
+        target_achieved = bool(best_performer and best_performer['final_value'] >= 50000.0)
+        
+        summary = {
+            'total_tested': int(len(symbols)),
+            'successful_backtests': int(len(formatted_results)),
+            'profitable_strategies': int(profitable_count),
+            'strategies_with_edge': int(edge_count),
+            'target_achieved': target_achieved,
+            'best_performer': str(best_performer['symbol']) if best_performer else None,
+            'best_return': float(best_performer['total_return']) if best_performer else 0.0,
+            'recommendation': str(get_trading_recommendation(formatted_results))
+        }
+        
+        # Build final response
+        response_data = {
+            'results': formatted_results,
+            'summary': summary,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        # Final JSON test
+        if not test_json_serialization(response_data, "full response"):
+            response_data = safe_json_convert(response_data)
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        error_msg = f"Backtest failed: {str(e)}"
+        logger.error(f"{error_msg}\nTraceback: {traceback.format_exc()}")
+        return jsonify({'error': error_msg}), 500
+
+def get_trading_recommendation(results):
+    """Generate trading recommendation - returns pure string"""
+    if not results:
+        return "No valid backtests completed. Check your symbols and data availability."
+    
+    best = results[0]
+    edge_strategies = [r for r in results if r['has_edge']]
+    
+    if not edge_strategies:
+        return "❌ NO PROFITABLE EDGE DETECTED. Do not trade with real money."
+    
+    if best['final_value'] >= 50000:
+        return f"🎉 STRONG EDGE DETECTED! {best['symbol']} could turn $5K into ${best['final_value']:,.0f}."
+    
+    if best['sharpe_ratio'] > 1.5 and best['total_return'] > 0.2:
+        return f"📈 MODERATE EDGE DETECTED. {best['symbol']} shows {best['total_return']:.1%} returns."
+    
+    if len(edge_strategies) >= 2:
+        return f"⚖️ DIVERSIFICATION OPPORTUNITY. {len(edge_strategies)} symbols show positive edge."
+    
+    return "⚠️ WEAK EDGE. Results are marginal."
+
+# Debug endpoint to test JSON serialization
+@app.route('/api/debug-json', methods=['GET'])
+def debug_json():
+    """Debug endpoint to test JSON serialization"""
+    test_data = {
+        'python_bool': True,
+        'numpy_bool': np.bool_(True),
+        'python_int': 42,
+        'numpy_int': np.int64(42),
+        'python_float': 3.14,
+        'numpy_float': np.float64(3.14),
+        'numpy_nan': np.nan,
+        'python_str': "hello",
+        'numpy_str': np.str_("world")
+    }
+    
+    print("🔍 Testing JSON serialization of different types:")
+    for key, value in test_data.items():
+        print(f"  {key}: {type(value)} = {value}")
+        try:
+            json.dumps({key: value})
+            print(f"    ✅ Serializable")
+        except Exception as e:
+            print(f"    ❌ Error: {e}")
+    
+    # Convert and test
+    safe_data = safe_json_convert(test_data)
+    return jsonify(safe_data)
+
+@app.route('/api/analyze-risk', methods=['POST'])
+def analyze_risk():
+    """Analyze risk for a single position"""
+    if not guardian:
+        return jsonify({'error': 'Portfolio Guardian not initialized'}), 500
+    
+    try:
+        data = request.get_json()
+        symbol = data.get('symbol', '').upper().strip()
+        position_size = data.get('position_size')
+        purchase_price = data.get('purchase_price')
+        
+        if not symbol:
+            return jsonify({'error': 'Symbol is required'}), 400
+        
+        logger.info(f"Analyzing risk for {symbol}")
+        
+        # Perform analysis
+        analysis = guardian.analyze_position(symbol, position_size, purchase_price)
+        
+        if not analysis:
+            return jsonify({'error': f'Could not analyze {symbol}'}), 404
+        
+        # Convert alerts to JSON-serializable format
+        if 'alerts' in analysis:
+            analysis['alerts'] = [
+                {
+                    'symbol': alert.symbol,
+                    'alert_type': alert.alert_type,
+                    'severity': alert.severity.value,
+                    'message': alert.message,
+                    'timestamp': alert.timestamp.isoformat(),
+                    'action_required': alert.action_required,
+                    'data': alert.data
+                }
+                for alert in analysis['alerts']
+            ]
+        
+        return jsonify(safe_json_convert(analysis))
+        
+    except Exception as e:
+        logger.error(f"Risk analysis error: {traceback.format_exc()}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/api/monitor-portfolio', methods=['POST'])
+def monitor_portfolio():
+    """Monitor entire portfolio for risks"""
+    if not guardian:
+        return jsonify({'error': 'Portfolio Guardian not initialized'}), 500
+    
+    try:
+        data = request.get_json()
+        portfolio = data.get('portfolio', [])
+        
+        if not portfolio:
+            return jsonify({'error': 'Portfolio is required'}), 400
+        
+        logger.info(f"Monitoring portfolio with {len(portfolio)} positions")
+        
+        # Monitor portfolio
+        results = guardian.monitor_portfolio(portfolio)
+        
+        # Convert alerts to JSON-serializable format
+        if 'alerts' in results:
+            results['alerts'] = [
+                {
+                    'symbol': alert.symbol,
+                    'alert_type': alert.alert_type,
+                    'severity': alert.severity.value,
+                    'message': alert.message,
+                    'timestamp': alert.timestamp.isoformat(),
+                    'action_required': alert.action_required,
+                    'data': alert.data
+                }
+                for alert in results['alerts']
+            ]
+        
+        return jsonify(safe_json_convert(results))
+        
+    except Exception as e:
+        logger.error(f"Portfolio monitoring error: {traceback.format_exc()}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/api/sentiment/<symbol>', methods=['GET'])
+def get_sentiment(symbol):
+    """Get social sentiment for a symbol"""
+    if not guardian:
+        return jsonify({'error': 'Portfolio Guardian not initialized'}), 500
+    
+    try:
+        symbol = symbol.upper().strip()
+        logger.info(f"Getting sentiment for {symbol}")
+        
+        # Get sentiment analysis
+        sentiment = guardian.sentiment_analyzer.analyze_symbol_sentiment(symbol)
+        
+        if not sentiment:
+            return jsonify({'error': f'Could not analyze sentiment for {symbol}'}), 404
+        
+        return jsonify(safe_json_convert(sentiment))
+        
+    except Exception as e:
+        logger.error(f"Sentiment analysis error: {traceback.format_exc()}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/api/market-pulse', methods=['GET'])
+def market_pulse():
+    """Get overall market sentiment and trending tickers"""
+    if not guardian:
+        return jsonify({'error': 'Portfolio Guardian not initialized'}), 500
+    
+    try:
+        logger.info("Getting market pulse")
+        
+        pulse = guardian.get_market_pulse()
+        
+        # Also get trending ticker details
+        trending_details = []
+        for ticker in pulse['trending_tickers'][:5]:  # Top 5
+            try:
+                # Quick risk check for each trending ticker
+                risk_metrics = guardian.volatility_predictor.predict_risk_metrics(ticker)
+                if risk_metrics:
+                    trending_details.append({
+                        'symbol': ticker,
+                        'current_price': risk_metrics['current_price'],
+                        'volatility': risk_metrics['current_volatility'],
+                        'risk_score': risk_metrics['risk_score'],
+                        'risk_level': risk_metrics['risk_level']
+                    })
+            except:
+                continue
+        
+        pulse['trending_details'] = trending_details
+        
+        return jsonify(safe_json_convert(pulse))
+        
+    except Exception as e:
+        logger.error(f"Market pulse error: {traceback.format_exc()}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/api/volatility-forecast', methods=['POST'])
+def volatility_forecast():
+    """Get volatility forecast for a symbol"""
+    if not guardian:
+        return jsonify({'error': 'Portfolio Guardian not initialized'}), 500
+    
+    try:
+        data = request.get_json()
+        symbol = data.get('symbol', '').upper().strip()
+        
+        if not symbol:
+            return jsonify({'error': 'Symbol is required'}), 400
+        
+        logger.info(f"Getting volatility forecast for {symbol}")
+        
+        # Get volatility predictions
+        risk_metrics = guardian.volatility_predictor.predict_risk_metrics(symbol)
+        
+        if not risk_metrics:
+            return jsonify({'error': f'Could not forecast volatility for {symbol}'}), 404
+        
+        return jsonify(safe_json_convert(risk_metrics))
+        
+    except Exception as e:
+        logger.error(f"Volatility forecast error: {traceback.format_exc()}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+
 if __name__ == '__main__':
     print("🚀 Stock Predictor API Server")
     print("=" * 40)
@@ -610,5 +970,13 @@ if __name__ == '__main__':
     print("   POST /api/predict")
     print("   POST /api/compare")
     print("   GET  /api/popular-symbols")
+    print("   POST /api/backtest")
+    print("   POST /api/quick-validation")
+    print("\n🛡️  Portfolio Guardian Endpoints:")
+    print("   POST /api/analyze-risk")
+    print("   POST /api/monitor-portfolio")
+    print("   GET  /api/sentiment/<symbol>")
+    print("   GET  /api/market-pulse")
+    print("   POST /api/volatility-forecast")
     
     app.run(debug=debug, host='0.0.0.0', port=port)

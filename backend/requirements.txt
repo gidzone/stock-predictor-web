@@ -1,4 +1,5 @@
 # Existing requirements...
+# Updated requirements.txt for Python 3.13 compatibility
 flask==3.1.1
 flask-cors==4.0.0
 pandas>=2.3.0
@@ -13,3 +14,7 @@ matplotlib>=3.8.0
 textblob==0.17.1
 praw==7.6.1  # Reddit API
 yfinance==0.2.18  # For ticker validation
+
+# Additional dependencies for backtesting
+scipy>=1.14.0
+matplotlib>=3.8.0

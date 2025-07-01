@@ -13,6 +13,7 @@ import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 import alpaca_trade_api as tradeapi
+from walk_forward_backtest import WalkForwardBacktester
 from datetime import datetime, timedelta
 import json
 import traceback
@@ -373,6 +374,241 @@ def popular_symbols():
     }
     
     return jsonify(symbols)
+# Updated quick validation endpoint
+@app.route('/api/quick-validation', methods=['POST'])
+def quick_validation():
+    """Quick validation on a single symbol with robust JSON handling"""
+    try:
+        data = request.get_json()
+        symbol = data.get('symbol', 'SPY').upper()
+        
+        from walk_forward_backtest import WalkForwardBacktester
+        backtester = WalkForwardBacktester(API_KEY, SECRET_KEY, BASE_URL)
+        
+        logger.info(f"Quick validation for {symbol}")
+        metrics = backtester.walk_forward_backtest(symbol)
+        
+        if not metrics or 'error' in metrics:
+            return jsonify({'error': f'Could not validate {symbol}'}), 400
+        
+        print(f"🔍 Raw metrics types:")
+        for key, value in metrics.items():
+            if key != 'results_df':  # Skip DataFrame
+                print(f"  {key}: {type(value)} = {value}")
+        
+        # Step 1: Extract and convert individual fields with explicit type checking
+        symbol_str = str(symbol)
+        total_return = float(metrics['total_return']) if not np.isnan(metrics['total_return']) else 0.0
+        sharpe_ratio = float(metrics['sharpe_ratio']) if not np.isnan(metrics['sharpe_ratio']) else 0.0
+        win_rate = float(metrics['win_rate']) if not np.isnan(metrics['win_rate']) else 0.0
+        max_drawdown = float(metrics['max_drawdown']) if not np.isnan(metrics['max_drawdown']) else 0.0
+        final_value = float(metrics['final_value']) if not np.isnan(metrics['final_value']) else 5000.0
+        kelly_fraction = float(metrics['kelly_fraction']) if not np.isnan(metrics['kelly_fraction']) else 0.0
+        
+        # Step 2: Calculate has_edge as pure Python boolean
+        has_edge_calc = (sharpe_ratio > 1.0 and total_return > 0.0 and win_rate > 0.5)
+        has_edge = bool(has_edge_calc)  # Ensure it's a Python bool
+        
+        # Step 3: Create recommendation as string
+        recommendation_str = "✅ TRADEABLE" if has_edge else "❌ AVOID"
+        
+        # Step 4: Build result with explicit Python types only
+        result = {
+            'symbol': symbol_str,
+            'has_edge': has_edge,
+            'total_return': total_return,
+            'sharpe_ratio': sharpe_ratio,
+            'win_rate': win_rate,
+            'max_drawdown': max_drawdown,
+            'final_value': final_value,
+            'recommendation': recommendation_str,
+            'kelly_position': kelly_fraction
+        }
+        
+        print(f"🔍 Result types:")
+        for key, value in result.items():
+            print(f"  {key}: {type(value)} = {value}")
+        
+        # Step 5: Test JSON serialization before returning
+        if not test_json_serialization(result, "quick validation result"):
+            # Fallback: apply safe conversion
+            result = safe_json_convert(result)
+        
+        # Step 6: Final JSON test
+        json_string = json.dumps(result)
+        print(f"✅ JSON serialization successful: {len(json_string)} characters")
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        error_msg = f"Quick validation error: {str(e)}"
+        logger.error(f"{error_msg}\nTraceback: {traceback.format_exc()}")
+        return jsonify({'error': error_msg}), 500
+
+# Updated full backtest endpoint
+@app.route('/api/backtest', methods=['POST'])
+def backtest():
+    """Run walk-forward backtest with robust JSON handling"""
+    if not predictor:
+        return jsonify({'error': 'Predictor not initialized. Check API credentials.'}), 500
+    
+    try:
+        data = request.get_json()
+        symbols = data.get('symbols', ['AAPL', 'SPY', 'QQQ'])
+        
+        if len(symbols) > 10:
+            return jsonify({'error': 'Maximum 10 symbols allowed'}), 400
+        
+        logger.info(f"Running backtests for {symbols}")
+        
+        from walk_forward_backtest import WalkForwardBacktester
+        backtester = WalkForwardBacktester(API_KEY, SECRET_KEY, BASE_URL)
+        
+        # Run backtests
+        results = backtester.test_multiple_symbols(symbols)
+        
+        if not results:
+            return jsonify({'error': 'No successful backtests completed'}), 500
+        
+        # Process results with explicit type conversion
+        formatted_results = []
+        profitable_count = 0
+        edge_count = 0
+        
+        for symbol, metrics in results.items():
+            print(f"🔍 Processing {symbol} metrics...")
+            
+            # Convert each field explicitly
+            symbol_str = str(symbol)
+            total_return = float(metrics['total_return']) if not np.isnan(metrics['total_return']) else 0.0
+            annual_return = float(metrics['annual_return']) if not np.isnan(metrics['annual_return']) else 0.0
+            sharpe_ratio = float(metrics['sharpe_ratio']) if not np.isnan(metrics['sharpe_ratio']) else 0.0
+            win_rate = float(metrics['win_rate']) if not np.isnan(metrics['win_rate']) else 0.0
+            max_drawdown = float(metrics['max_drawdown']) if not np.isnan(metrics['max_drawdown']) else 0.0
+            total_trades = int(metrics['total_trades'])
+            profit_factor = float(metrics['profit_factor']) if not np.isnan(metrics['profit_factor']) else 0.0
+            kelly_fraction = float(metrics['kelly_fraction']) if not np.isnan(metrics['kelly_fraction']) else 0.0
+            final_value = float(metrics['final_value']) if not np.isnan(metrics['final_value']) else 5000.0
+            time_in_market = float(metrics['time_in_market']) if not np.isnan(metrics['time_in_market']) else 0.0
+            
+            # Calculate booleans as pure Python types
+            is_profitable = bool(total_return > 0.0)
+            has_edge = bool(sharpe_ratio > 1.0 and total_return > 0.1 and win_rate > 0.5)
+            
+            if is_profitable:
+                profitable_count += 1
+            if has_edge:
+                edge_count += 1
+            
+            # Build result record
+            result_record = {
+                'symbol': symbol_str,
+                'total_return': total_return,
+                'annual_return': annual_return,
+                'sharpe_ratio': sharpe_ratio,
+                'win_rate': win_rate,
+                'max_drawdown': max_drawdown,
+                'total_trades': total_trades,
+                'profit_factor': profit_factor,
+                'kelly_fraction': kelly_fraction,
+                'final_value': final_value,
+                'is_profitable': is_profitable,
+                'has_edge': has_edge,
+                'time_in_market': time_in_market
+            }
+            
+            # Test this record
+            if not test_json_serialization(result_record, f"{symbol} record"):
+                result_record = safe_json_convert(result_record)
+            
+            formatted_results.append(result_record)
+        
+        # Sort by Sharpe ratio
+        formatted_results.sort(key=lambda x: x['sharpe_ratio'], reverse=True)
+        
+        # Build summary
+        best_performer = formatted_results[0] if formatted_results else None
+        target_achieved = bool(best_performer and best_performer['final_value'] >= 50000.0)
+        
+        summary = {
+            'total_tested': int(len(symbols)),
+            'successful_backtests': int(len(formatted_results)),
+            'profitable_strategies': int(profitable_count),
+            'strategies_with_edge': int(edge_count),
+            'target_achieved': target_achieved,
+            'best_performer': str(best_performer['symbol']) if best_performer else None,
+            'best_return': float(best_performer['total_return']) if best_performer else 0.0,
+            'recommendation': str(get_trading_recommendation(formatted_results))
+        }
+        
+        # Build final response
+        response_data = {
+            'results': formatted_results,
+            'summary': summary,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        # Final JSON test
+        if not test_json_serialization(response_data, "full response"):
+            response_data = safe_json_convert(response_data)
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        error_msg = f"Backtest failed: {str(e)}"
+        logger.error(f"{error_msg}\nTraceback: {traceback.format_exc()}")
+        return jsonify({'error': error_msg}), 500
+
+def get_trading_recommendation(results):
+    """Generate trading recommendation - returns pure string"""
+    if not results:
+        return "No valid backtests completed. Check your symbols and data availability."
+    
+    best = results[0]
+    edge_strategies = [r for r in results if r['has_edge']]
+    
+    if not edge_strategies:
+        return "❌ NO PROFITABLE EDGE DETECTED. Do not trade with real money."
+    
+    if best['final_value'] >= 50000:
+        return f"🎉 STRONG EDGE DETECTED! {best['symbol']} could turn $5K into ${best['final_value']:,.0f}."
+    
+    if best['sharpe_ratio'] > 1.5 and best['total_return'] > 0.2:
+        return f"📈 MODERATE EDGE DETECTED. {best['symbol']} shows {best['total_return']:.1%} returns."
+    
+    if len(edge_strategies) >= 2:
+        return f"⚖️ DIVERSIFICATION OPPORTUNITY. {len(edge_strategies)} symbols show positive edge."
+    
+    return "⚠️ WEAK EDGE. Results are marginal."
+
+# Debug endpoint to test JSON serialization
+@app.route('/api/debug-json', methods=['GET'])
+def debug_json():
+    """Debug endpoint to test JSON serialization"""
+    test_data = {
+        'python_bool': True,
+        'numpy_bool': np.bool_(True),
+        'python_int': 42,
+        'numpy_int': np.int64(42),
+        'python_float': 3.14,
+        'numpy_float': np.float64(3.14),
+        'numpy_nan': np.nan,
+        'python_str': "hello",
+        'numpy_str': np.str_("world")
+    }
+    
+    print("🔍 Testing JSON serialization of different types:")
+    for key, value in test_data.items():
+        print(f"  {key}: {type(value)} = {value}")
+        try:
+            json.dumps({key: value})
+            print(f"    ✅ Serializable")
+        except Exception as e:
+            print(f"    ❌ Error: {e}")
+    
+    # Convert and test
+    safe_data = safe_json_convert(test_data)
+    return jsonify(safe_data)
 
 # Updated full backtest endpoint
 @app.route('/api/backtest', methods=['POST'])

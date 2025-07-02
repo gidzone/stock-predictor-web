@@ -3,10 +3,11 @@
 import { useState } from 'react'
 import StockPredictor from './components/StockPredictor'
 import PortfolioGuardian from './components/PortfolioGuardian'
-import { Brain, Shield } from 'lucide-react'
+import PortfolioUpload from './components/PortfolioUpload'
+import { Brain, Shield, AlertTriangle } from 'lucide-react'
 
 export default function Home() {
-  const [activeApp, setActiveApp] = useState('guardian') // 'predictor' or 'guardian'
+  const [activeApp, setActiveApp] = useState('alerts') // 'predictor', 'guardian', or 'alerts'
 
   return (
     <div className="min-h-screen">
@@ -14,6 +15,17 @@ export default function Home() {
       <div className="bg-white shadow-sm border-b">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-center gap-4">
+            <button
+              onClick={() => setActiveApp('alerts')}
+              className={`flex items-center gap-2 px-6 py-3 rounded-lg transition-all ${
+                activeApp === 'alerts'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <AlertTriangle size={20} />
+              Volatility Alerts
+            </button>
             <button
               onClick={() => setActiveApp('guardian')}
               className={`flex items-center gap-2 px-6 py-3 rounded-lg transition-all ${
@@ -41,7 +53,7 @@ export default function Home() {
       </div>
 
       {/* Active App */}
-      {activeApp === 'guardian' ? <PortfolioGuardian /> : <StockPredictor />}
+      {activeApp === 'alerts' ? <PortfolioUpload /> : activeApp === 'guardian' ? <PortfolioGuardian /> : <StockPredictor />}
     </div>
   )
 }

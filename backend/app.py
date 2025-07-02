@@ -800,6 +800,363 @@ def volatility_forecast():
         logger.error(f"Volatility forecast error: {traceback.format_exc()}")
         return jsonify({'error': 'Internal server error'}), 500
 
+# Add these imports at the top if not already there
+import time
+from werkzeug.utils import secure_filename
+
+# Add after your existing routes, before if __name__ == '__main__':
+
+@app.route('/api/upload-portfolio', methods=['POST'])
+def upload_portfolio():
+    """Upload portfolio CSV for monitoring"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        
+        # Read CSV
+        df = pd.read_csv(file)
+        logger.info(f"CSV loaded with shape: {df.shape}")
+        logger.info(f"CSV columns: {df.columns.tolist()}")
+        logger.info(f"First few rows:\n{df.head()}")
+        
+        # Expected columns: symbol, shares, purchase_price
+        required_cols = ['symbol', 'shares', 'purchase_price']
+        if not all(col in df.columns for col in required_cols):
+            return jsonify({'error': f'CSV must have columns: {", ".join(required_cols)}'}), 400
+        
+        # Clean the data
+        df['symbol'] = df['symbol'].str.upper().str.strip()
+        df['shares'] = pd.to_numeric(df['shares'], errors='coerce')
+        df['purchase_price'] = pd.to_numeric(df['purchase_price'], errors='coerce')
+        
+        # Remove invalid rows
+        df = df.dropna()
+        logger.info(f"After cleaning: {len(df)} rows remain")
+        
+        portfolio = []
+        failed_symbols = []
+        
+        # Get current prices for each position
+        for _, row in df.iterrows():
+            try:
+                symbol = row['symbol']
+                logger.info(f"Processing {symbol}...")
+                
+                # Use your existing predictor to get current data
+                current_data = predictor.fetch_data(symbol, days_back=30)
+                
+                if current_data is not None and len(current_data) > 0:
+                    current_price = float(current_data['close'].iloc[-1])
+                    position = {
+                        'symbol': symbol,
+                        'shares': float(row['shares']),
+                        'purchase_price': float(row['purchase_price']),
+                        'current_price': current_price,
+                        'current_value': current_price * float(row['shares']),
+                        'gain_loss': (current_price - float(row['purchase_price'])) * float(row['shares']),
+                        'gain_loss_pct': ((current_price / float(row['purchase_price'])) - 1) * 100
+                    }
+                    portfolio.append(position)
+                    logger.info(f"✓ {symbol} processed successfully")
+                else:
+                    logger.warning(f"✗ Could not fetch data for {symbol}")
+                    failed_symbols.append(symbol)
+                    # Add with just the CSV data
+                    position = {
+                        'symbol': symbol,
+                        'shares': float(row['shares']),
+                        'purchase_price': float(row['purchase_price']),
+                        'current_price': 0,  # Will need to handle this in frontend
+                        'current_value': 0,
+                        'gain_loss': 0,
+                        'gain_loss_pct': 0
+                    }
+                    portfolio.append(position)
+                    
+            except Exception as e:
+                logger.error(f"Error processing {symbol}: {e}")
+                failed_symbols.append(symbol)
+                continue
+        
+        # Save portfolio for monitoring (simple file storage for MVP)
+        portfolio_data = {
+            'portfolio': portfolio,
+            'uploaded_at': datetime.now().isoformat(),
+            'total_value': sum(p['current_value'] for p in portfolio),
+            'total_cost': sum(p['shares'] * p['purchase_price'] for p in portfolio)
+        }
+        
+        with open('my_portfolio.json', 'w') as f:
+            json.dump(portfolio_data, f, indent=2)
+        
+        response_data = {
+            'success': True,
+            'portfolio': portfolio,
+            'summary': {
+                'positions': len(portfolio),
+                'total_value': portfolio_data['total_value'],
+                'total_cost': portfolio_data['total_cost'],
+                'total_gain_loss': portfolio_data['total_value'] - portfolio_data['total_cost']
+            }
+        }
+        
+        if failed_symbols:
+            response_data['warnings'] = f"Could not fetch data for: {', '.join(failed_symbols)}"
+            
+        logger.info(f"Returning {len(portfolio)} positions")
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        logger.error(f"Portfolio upload error: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/check-volatility-alerts', methods=['GET'])
+def check_volatility_alerts():
+    """Check portfolio for volatility spikes"""
+    try:
+        # Load portfolio
+        try:
+            with open('my_portfolio.json', 'r') as f:
+                data = json.load(f)
+                portfolio = data['portfolio']
+        except FileNotFoundError:
+            return jsonify({'error': 'No portfolio uploaded yet'}), 404
+        
+        alerts = []
+        all_checks = []
+        
+        for position in portfolio:
+            symbol = position['symbol']
+            
+            # Get volatility data
+            volatility_check = check_volatility_spike(
+                symbol, 
+                position_shares=position['shares'],
+                position_price=position['current_price']
+            )
+            
+            # Add position info to check
+            volatility_check['position_info'] = position
+            all_checks.append(volatility_check)
+            
+            if volatility_check['should_alert']:
+                alerts.append({
+                    'symbol': symbol,
+                    'severity': volatility_check['severity'],
+                    'message': format_alert_message(position, volatility_check),
+                    'volatility_ratio': volatility_check['volatility_ratio'],
+                    'current_volatility': volatility_check['current_volatility'],
+                    'historical_accuracy': volatility_check.get('historical_accuracy', {})
+                })
+        
+        # Use safe_json_convert to handle numpy types
+        response_data = safe_json_convert({
+            'alerts': alerts,
+            'all_positions': all_checks,
+            'checked_at': datetime.now().isoformat(),
+            'alert_count': len(alerts)
+        })
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        logger.error(f"Alert check error: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+def check_volatility_spike(symbol, position_shares, position_price):
+    """Check if volatility has spiked for a symbol"""
+    try:
+        # Get recent data using your existing predictor
+        data = predictor.fetch_data(symbol, days_back=60)
+        if data is None or len(data) < 20:
+            return {
+                'symbol': symbol,
+                'should_alert': False,  # Python bool
+                'error': 'Insufficient data'
+            }
+        
+        # Calculate returns
+        data['returns'] = data['close'].pct_change()
+        
+        # Current volatility (5-day)
+        current_vol = float(data['returns'].tail(5).std() * np.sqrt(252) * 100)
+        
+        # Historical volatility (20-day)
+        hist_vol = float(data['returns'].tail(20).std() * np.sqrt(252) * 100)
+        
+        # 60-day baseline
+        baseline_vol = float(data['returns'].tail(60).std() * np.sqrt(252) * 100)
+        
+        # Calculate spike ratio
+        vol_ratio = float(current_vol / hist_vol if hist_vol > 0 else 1)
+        
+        # Position value
+        position_value = float(position_shares * position_price)
+        
+        # Alert thresholds (start conservative)
+        should_alert = bool(  # Ensure Python bool
+            vol_ratio > 2.0 and  # 2x spike
+            current_vol > 40 and  # Minimum 40% annualized volatility
+            position_value > 5000  # Position worth alerting about
+        )
+        
+        # Determine severity
+        if vol_ratio > 3.0 and current_vol > 60:
+            severity = 'CRITICAL'
+        elif vol_ratio > 2.5 or current_vol > 50:
+            severity = 'HIGH'
+        else:
+            severity = 'MEDIUM'
+        
+        # Analyze what happened historically after similar spikes
+        historical_accuracy = analyze_historical_spikes(data, vol_ratio)
+        
+        return {
+            'symbol': symbol,
+            'should_alert': should_alert,
+            'current_volatility': current_vol,
+            'historical_volatility': hist_vol,
+            'baseline_volatility': baseline_vol,
+            'volatility_ratio': vol_ratio,
+            'position_value': position_value,
+            'severity': severity,
+            'historical_accuracy': historical_accuracy,
+            'current_price': float(position_price)
+        }
+        
+    except Exception as e:
+        logger.error(f"Volatility check error for {symbol}: {e}")
+        return {
+            'symbol': symbol,
+            'should_alert': False,
+            'error': str(e)
+        }
+
+def analyze_historical_spikes(data, current_ratio):
+    """Look at what happened after similar volatility spikes"""
+    try:
+        returns = data['returns'].dropna()
+        
+        # Find historical instances of similar spikes
+        outcomes = []
+        
+        for i in range(20, len(data) - 5):
+            # Calculate historical volatility at this point
+            hist_vol = returns.iloc[max(0, i-20):i].std() * np.sqrt(252)
+            current_vol = returns.iloc[max(0, i-5):i].std() * np.sqrt(252)
+            
+            if hist_vol > 0:
+                ratio = current_vol / hist_vol
+                
+                # If similar spike occurred
+                if ratio > (current_ratio * 0.8) and ratio < (current_ratio * 1.2):
+                    # What happened in next 5 days?
+                    future_return = (data['close'].iloc[i+5] / data['close'].iloc[i] - 1) * 100
+                    outcomes.append(future_return)
+        
+        if len(outcomes) >= 3:  # Need at least 3 instances
+            drops = [r for r in outcomes if r < -5]  # Significant drops
+            big_drops = [r for r in outcomes if r < -10]  # Major drops
+            
+            return {
+                'instances': len(outcomes),
+                'drops_5pct': len(drops),
+                'drops_10pct': len(big_drops),
+                'drop_rate': (len(drops) / len(outcomes) * 100),
+                'avg_move': np.mean(outcomes),
+                'worst_move': min(outcomes) if outcomes else 0,
+                'best_move': max(outcomes) if outcomes else 0
+            }
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"Historical analysis error: {e}")
+        return None
+
+def format_alert_message(position, volatility_data):
+    """Format a clear, actionable alert message"""
+    symbol = position['symbol']
+    shares = position['shares']
+    current_price = position['current_price']
+    current_value = position['current_value']
+    purchase_price = position['purchase_price']
+    gain_loss_pct = position['gain_loss_pct']
+    
+    vol_ratio = volatility_data['volatility_ratio']
+    current_vol = volatility_data['current_volatility']
+    severity = volatility_data['severity']
+    
+    # Base message
+    message = f"""🚨 VOLATILITY ALERT - {symbol}
+
+Position: ${current_value:,.0f} ({shares} shares @ ${current_price:.2f})
+Your cost basis: ${purchase_price:.2f} ({gain_loss_pct:+.1f}%)
+
+⚠️ Volatility has spiked to {vol_ratio:.1f}x normal levels
+Current volatility: {current_vol:.0f}% annualized"""
+
+    # Add historical context if available
+    hist = volatility_data.get('historical_accuracy')
+    if hist and hist.get('instances', 0) >= 3:
+        message += f"""
+
+📊 Historical Pattern ({hist['instances']} similar cases):
+- {hist['drop_rate']:.0f}% resulted in >5% drops within 5 days
+- Average move: {hist['avg_move']:.1f}%
+- Worst case: {hist['worst_move']:.1f}%"""
+
+    # Add specific recommendations based on position
+    if gain_loss_pct > 20:
+        message += f"""
+
+💡 Recommended Actions (you're up {gain_loss_pct:.1f}%):
+1. Take profits on {int(shares * 0.3)}-{int(shares * 0.5)} shares
+2. Set trailing stop at ${current_price * 0.95:.2f} (-5%)
+3. Hold if you believe in long-term thesis"""
+    elif gain_loss_pct < -10:
+        message += f"""
+
+💡 Recommended Actions (you're down {abs(gain_loss_pct):.1f}%):
+1. Consider tax-loss harvesting
+2. Set stop-loss at ${current_price * 0.93:.2f} to prevent further losses
+3. Review if original thesis still valid"""
+    else:
+        message += f"""
+
+💡 Recommended Actions:
+1. Reduce position by {int(shares * 0.3)} shares
+2. Set stop-loss at ${current_price * 0.93:.2f} (-7%)
+3. Wait for volatility to subside"""
+
+    return message
+
+# Optional: Add a simple notification preference endpoint
+@app.route('/api/save-alert-preferences', methods=['POST'])
+def save_alert_preferences():
+    """Save user notification preferences"""
+    try:
+        data = request.get_json()
+        
+        preferences = {
+            'email': data.get('email'),
+            'phone': data.get('phone'),
+            'alert_threshold': data.get('alert_threshold', 2.0),  # Volatility spike threshold
+            'min_position_value': data.get('min_position_value', 5000),
+            'enabled': data.get('enabled', True)
+        }
+        
+        with open('alert_preferences.json', 'w') as f:
+            json.dump(preferences, f, indent=2)
+        
+        return jsonify({'success': True, 'preferences': preferences})
+        
+    except Exception as e:
+        logger.error(f"Save preferences error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     print("🚀 Stock Predictor API Server")

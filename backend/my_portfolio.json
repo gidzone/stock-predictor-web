@@ -1,0 +1,106 @@
+{
+  "portfolio": [
+    {
+      "symbol": "ANF",
+      "shares": 100.0,
+      "purchase_price": 16.28,
+      "current_price": 88.27,
+      "current_value": 8827.0,
+      "gain_loss": 7198.999999999999,
+      "gain_loss_pct": 442.19901719901713
+    },
+    {
+      "symbol": "GM",
+      "shares": 100.0,
+      "purchase_price": 38.5,
+      "current_price": 52.03,
+      "current_value": 5203.0,
+      "gain_loss": 1353.0,
+      "gain_loss_pct": 35.14285714285714
+    },
+    {
+      "symbol": "AAPL",
+      "shares": 100.0,
+      "purchase_price": 24.65,
+      "current_price": 207.82,
+      "current_value": 20782.0,
+      "gain_loss": 18317.0,
+      "gain_loss_pct": 743.0831643002028
+    },
+    {
+      "symbol": "DAL",
+      "shares": 100.0,
+      "purchase_price": 37.73,
+      "current_price": 49.0,
+      "current_value": 4900.0,
+      "gain_loss": 1127.0000000000002,
+      "gain_loss_pct": 29.87012987012989
+    },
+    {
+      "symbol": "FBALX",
+      "shares": 416.587,
+      "purchase_price": 24.08,
+      "current_price": 0,
+      "current_value": 0,
+      "gain_loss": 0,
+      "gain_loss_pct": 0
+    },
+    {
+      "symbol": "FSPGX",
+      "shares": 110.018,
+      "purchase_price": 23.08,
+      "current_price": 0,
+      "current_value": 0,
+      "gain_loss": 0,
+      "gain_loss_pct": 0
+    },
+    {
+      "symbol": "TOST",
+      "shares": 100.0,
+      "purchase_price": 17.45,
+      "current_price": 43.03,
+      "current_value": 4303.0,
+      "gain_loss": 2558.0,
+      "gain_loss_pct": 146.59025787965615
+    },
+    {
+      "symbol": "TKO",
+      "shares": 52.0,
+      "purchase_price": 10.17,
+      "current_price": 175.61,
+      "current_value": 9131.720000000001,
+      "gain_loss": 8602.880000000001,
+      "gain_loss_pct": 1626.7453294001966
+    },
+    {
+      "symbol": "MSFT",
+      "shares": 75.0,
+      "purchase_price": 25.68,
+      "current_price": 492.05,
+      "current_value": 36903.75,
+      "gain_loss": 34977.75,
+      "gain_loss_pct": 1816.0825545171342
+    },
+    {
+      "symbol": "NVDA",
+      "shares": 100.0,
+      "purchase_price": 122.81,
+      "current_price": 153.3,
+      "current_value": 15330.000000000002,
+      "gain_loss": 3049.000000000001,
+      "gain_loss_pct": 24.826968487908154
+    },
+    {
+      "symbol": "FZDXX",
+      "shares": 102254.51,
+      "purchase_price": 1.0,
+      "current_price": 0,
+      "current_value": 0,
+      "gain_loss": 0,
+      "gain_loss_pct": 0
+    }
+  ],
+  "uploaded_at": "2025-07-01T21:54:42.785353",
+  "total_value": 105380.47,
+  "total_cost": 143021.9804
+}

@@ -1,3 +1,5 @@
+'use client'
+
 import { useState, useEffect } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, BarChart, Bar } from 'recharts'
 import { 
@@ -17,7 +19,7 @@ const severityColors = {
 
 // Risk level colors
 const riskLevelColors = {
-  'VERY_LOW': 'green',
+  'VERY_LOW': 'emerald',
   'LOW': 'lime',
   'MODERATE': 'yellow',
   'HIGH': 'orange',
@@ -120,264 +122,92 @@ export default function PortfolioGuardian() {
     
     return (
       <div className="space-y-6">
-        {/* Portfolio Metrics */}
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-            <Shield className="text-blue-600" />
-            Portfolio Protection Status
-          </h2>
+        {/* Portfolio Summary */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
+            <div className="flex items-center gap-3">
+              <Shield className="text-emerald-400" size={24} />
+              <div>
+                <p className="text-sm text-slate-400">Total Value</p>
+                <p className="text-xl font-bold text-white">
+                  {formatCurrency(metrics.total_value)}
+                </p>
+              </div>
+            </div>
+          </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-blue-50 rounded-lg p-4">
-              <p className="text-sm text-blue-600">Total Value</p>
-              <p className="text-2xl font-bold text-blue-800">
-                {formatCurrency(metrics.total_value)}
-              </p>
-            </div>
-            
-            <div className="bg-orange-50 rounded-lg p-4">
-              <p className="text-sm text-orange-600">5-Day Risk (VaR)</p>
-              <p className="text-2xl font-bold text-orange-800">
-                {formatCurrency(metrics.total_var_5d)}
-              </p>
-              <p className="text-xs text-orange-600">
-                {formatPercent(metrics.var_percentage_5d)} of portfolio
-              </p>
-            </div>
-            
-            <div className="bg-purple-50 rounded-lg p-4">
-              <p className="text-sm text-purple-600">Diversification Score</p>
-              <p className="text-2xl font-bold text-purple-800">
-                {metrics.diversification_score.toFixed(0)}/100
-              </p>
-            </div>
-            
-            <div className={`rounded-lg p-4 ${
-              criticalAlerts.length > 0 ? 'bg-red-50' : 
-              warningAlerts.length > 0 ? 'bg-yellow-50' : 'bg-green-50'
-            }`}>
-              <p className={`text-sm ${
-                criticalAlerts.length > 0 ? 'text-red-600' : 
-                warningAlerts.length > 0 ? 'text-yellow-600' : 'text-green-600'
-              }`}>Active Alerts</p>
-              <p className={`text-2xl font-bold ${
-                criticalAlerts.length > 0 ? 'text-red-800' : 
-                warningAlerts.length > 0 ? 'text-yellow-800' : 'text-green-800'
-              }`}>
-                {alerts.length}
-              </p>
-              {criticalAlerts.length > 0 && (
-                <p className="text-xs text-red-600">{criticalAlerts.length} critical</p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Action Items */}
-        {portfolioAnalysis.action_items?.length > 0 && (
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-              <Target className="text-red-600" />
-              Action Required
-            </h3>
-            <div className="space-y-3">
-              {portfolioAnalysis.action_items.map((item, index) => (
-                <div key={index} className="flex items-start gap-3 p-3 bg-red-50 rounded-lg">
-                  <AlertTriangle className="text-red-600 mt-1" size={20} />
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-800">{item.action}</p>
-                    <p className="text-sm text-gray-600">
-                      {item.symbol} • {item.deadline}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Position Summary */}
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Position Analysis</h3>
-          <div className="space-y-3">
-            {portfolioAnalysis.portfolio_analysis?.map((analysis, index) => {
-              if (!analysis) return null
-              
-              const position = portfolio[index]
-              const riskScore = analysis.combined_risk_score || { level: 'UNKNOWN', score: 0 }
-              const alerts = analysis.alerts || []
-              
-              return (
-                <div 
-                  key={position.symbol}
-                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 cursor-pointer"
-                  onClick={() => {
-                    setSelectedPosition(analysis)
-                    setActiveView('position')
-                  }}
-                >
-                  <div className="flex items-center gap-4">
-                    <div>
-                      <p className="font-semibold text-gray-800">{position.symbol}</p>
-                      <p className="text-sm text-gray-600">
-                        {position.shares} shares @ {formatCurrency(position.purchase_price)}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-4">
-                    {alerts.length > 0 && (
-                      <div className="flex items-center gap-1">
-                        <Bell className={`${
-                          alerts.some(a => a.severity === 'critical') ? 'text-red-500' :
-                          alerts.some(a => a.severity === 'warning') ? 'text-yellow-500' :
-                          'text-blue-500'
-                        }`} size={20} />
-                        <span className="text-sm font-medium">{alerts.length}</span>
-                      </div>
-                    )}
-                    
-                    <div className={`px-3 py-1 rounded-full text-sm font-medium text-white ${
-                      riskScore.level === 'EXTREME' ? 'bg-red-500' :
-                      riskScore.level === 'HIGH' ? 'bg-orange-500' :
-                      riskScore.level === 'MODERATE' ? 'bg-yellow-500' :
-                      riskScore.level === 'LOW' ? 'bg-lime-500' :
-                      'bg-green-500'
-                    }`}>
-                      {riskScore.level}
-                    </div>
-                    
-                    <ChevronRight className="text-gray-400" size={20} />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  const PositionDetailView = () => {
-    if (!selectedPosition) return null
-    
-    const risk = selectedPosition.risk_analysis || {}
-    const sentiment = selectedPosition.sentiment_analysis || {}
-    const alerts = selectedPosition.alerts || []
-    const recommendations = selectedPosition.recommendations || []
-    
-    // Check if we have valid risk data
-    const hasRiskData = risk && risk.current_volatility !== undefined
-    
-    return (
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-gray-800">
-            {selectedPosition.symbol} Analysis
-          </h2>
-          <button
-            onClick={() => setActiveView('overview')}
-            className="text-gray-600 hover:text-gray-800"
-          >
-            <X size={24} />
-          </button>
-        </div>
-
-        {/* Risk Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Volatility Chart */}
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">
-              Volatility Forecast
-            </h3>
-            {hasRiskData ? (
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm text-gray-600">Current Volatility</p>
-                  <p className="text-xl font-bold">{formatPercent(risk.current_volatility || 0)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">5-Day Forecast</p>
-                  <p className={`text-xl font-bold ${
-                    (risk.predicted_volatility_5d || 0) > (risk.current_volatility || 0) ? 'text-red-600' : 'text-green-600'
-                  }`}>
-                    {formatPercent(risk.predicted_volatility_5d || 0)}
-                    {(risk.predicted_volatility_5d || 0) > (risk.current_volatility || 0) ? ' ↑' : ' ↓'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Max Drawdown Risk</p>
-                  <p className="text-xl font-bold text-orange-600">
-                    {formatPercent(Math.abs(risk.predicted_max_drawdown_5d || 0))}
-                  </p>
-                </div>
+          <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="text-yellow-400" size={24} />
+              <div>
+                <p className="text-sm text-slate-400">Risk Level</p>
+                <p className="text-xl font-bold text-white">
+                  {metrics.var_percentage_20d.toFixed(1)}%
+                </p>
               </div>
-            ) : (
-              <p className="text-gray-500">Loading risk analysis...</p>
-            )}
+            </div>
           </div>
-
-          {/* Sentiment Analysis */}
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">
-              Social Sentiment
-            </h3>
-            {sentiment && sentiment.overall_sentiment ? (
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm text-gray-600">Overall Sentiment</p>
-                  <p className={`text-xl font-bold ${
-                    sentiment.overall_sentiment.score > 50 ? 'text-green-600' :
-                    sentiment.overall_sentiment.score < -50 ? 'text-red-600' :
-                    'text-gray-600'
-                  }`}>
-                    {sentiment.overall_sentiment.interpretation || 'Unknown'}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    Score: {(sentiment.overall_sentiment.score || 0).toFixed(0)}/100
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Social Activity</p>
-                  <p className="text-xl font-bold">
-                    {(sentiment.reddit_metrics?.mention_velocity || 0).toFixed(0)} mentions/hour
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Confidence</p>
-                  <p className="text-lg font-medium">{sentiment.overall_sentiment.confidence || 'Low'}</p>
-                </div>
+          
+          <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
+            <div className="flex items-center gap-3">
+              <Bell className="text-red-400" size={24} />
+              <div>
+                <p className="text-sm text-slate-400">Active Alerts</p>
+                <p className="text-xl font-bold text-white">
+                  {criticalAlerts.length} Critical
+                </p>
               </div>
-            ) : (
-              <p className="text-gray-500">Loading sentiment analysis...</p>
-            )}
+            </div>
+          </div>
+          
+          <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
+            <div className="flex items-center gap-3">
+              <Activity className="text-emerald-400" size={24} />
+              <div>
+                <p className="text-sm text-slate-400">Diversification</p>
+                <p className="text-xl font-bold text-white">
+                  {metrics.diversification_score.toFixed(1)}/10
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Alerts */}
         {alerts.length > 0 && (
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Active Alerts</h3>
+          <div className="bg-red-900/20 rounded-lg p-6 border border-red-500">
+            <h3 className="text-lg font-semibold text-red-400 mb-4 flex items-center gap-2">
+              <AlertTriangle size={20} />
+              Active Alerts ({alerts.length})
+            </h3>
             <div className="space-y-3">
-              {alerts.map((alert, index) => (
-                <div key={index} className={`p-4 rounded-lg border-l-4 ${
-                  alert.severity === 'critical' ? 'bg-red-50 border-red-500' :
-                  alert.severity === 'warning' ? 'bg-yellow-50 border-yellow-500' :
-                  'bg-blue-50 border-blue-500'
+              {alerts.map((alert, idx) => (
+                <div key={idx} className={`p-4 rounded-lg border ${
+                  alert.severity === 'critical' 
+                    ? 'bg-red-900/20 border-red-700' 
+                    : alert.severity === 'warning'
+                    ? 'bg-yellow-900/20 border-yellow-700'
+                    : 'bg-blue-900/20 border-blue-700'
                 }`}>
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className={`mt-0.5 ${
-                      alert.severity === 'critical' ? 'text-red-600' :
-                      alert.severity === 'warning' ? 'text-yellow-600' :
-                      'text-blue-600'
-                    }`} size={20} />
+                  <div className="flex items-start justify-between">
                     <div>
-                      <p className="font-medium text-gray-800">{alert.message}</p>
-                      <p className="text-sm text-gray-600 mt-1">
-                        {new Date(alert.timestamp).toLocaleString()}
-                      </p>
+                      <h4 className="font-medium text-white">{alert.symbol}: {alert.type}</h4>
+                      <p className="text-slate-300">{alert.message}</p>
+                      {alert.recommendation && (
+                        <p className="text-sm text-emerald-400 mt-2">
+                          Action: {alert.recommendation}
+                        </p>
+                      )}
                     </div>
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      alert.severity === 'critical' 
+                        ? 'bg-red-500 text-white' 
+                        : alert.severity === 'warning'
+                        ? 'bg-yellow-500 text-black'
+                        : 'bg-blue-500 text-white'
+                    }`}>
+                      {alert.severity.toUpperCase()}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -385,18 +215,66 @@ export default function PortfolioGuardian() {
           </div>
         )}
 
-        {/* Recommendations */}
-        {recommendations.length > 0 && (
-          <div className="bg-white rounded-lg shadow-lg p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Recommendations</h3>
-            <div className="space-y-3">
-              {recommendations.map((rec, index) => (
-                <div key={index} className="p-4 bg-blue-50 rounded-lg">
-                  <p className="font-medium text-gray-800">{rec.message}</p>
-                  <p className="text-sm text-gray-600 mt-1">{rec.rationale}</p>
+        {/* Position Analysis */}
+        <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
+          <h3 className="text-lg font-semibold text-white mb-4">Position Analysis</h3>
+          <div className="space-y-4">
+            {portfolioAnalysis.portfolio_analysis.map((position, idx) => (
+              <div key={idx} className="border border-slate-700 rounded-lg p-4 hover:bg-slate-700/50 transition-colors">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <h4 className="font-bold text-lg text-white">{position.symbol}</h4>
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      position.combined_risk.level === 'EXTREME' 
+                        ? 'bg-red-500 text-white' 
+                        : position.combined_risk.level === 'HIGH'
+                        ? 'bg-orange-500 text-white'
+                        : position.combined_risk.level === 'MODERATE'
+                        ? 'bg-yellow-500 text-black'
+                        : 'bg-emerald-500 text-white'
+                    }`}>
+                      {position.combined_risk.level} RISK
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setSelectedPosition(position)}
+                    className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1"
+                  >
+                    View Details <ChevronRight size={16} />
+                  </button>
                 </div>
+                
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <p className="text-slate-400">Current Price</p>
+                    <p className="font-medium text-white">{formatCurrency(position.current_price)}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400">Volatility</p>
+                    <p className="font-medium text-white">{formatPercent(position.risk_metrics.volatility)}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400">Risk Score</p>
+                    <p className="font-medium text-white">{position.combined_risk.score}/100</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Action Items */}
+        {portfolioAnalysis.action_items?.length > 0 && (
+          <div className="bg-emerald-900/20 rounded-lg p-6 border border-emerald-500">
+            <h3 className="text-lg font-semibold text-emerald-400 mb-4">Recommended Actions</h3>
+            <ul className="space-y-2">
+              {portfolioAnalysis.action_items.map((item, idx) => (
+                <li key={idx} className="flex items-start gap-2">
+                  <CheckCircle className="text-emerald-400 mt-0.5" size={16} />
+                  <span className="text-white">{item}</span>
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
         )}
       </div>
@@ -408,31 +286,115 @@ export default function PortfolioGuardian() {
     
     return (
       <div className="space-y-6">
-        <h2 className="text-2xl font-bold text-gray-800">Market Pulse</h2>
-        
-        {/* Trending Tickers */}
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">
-            Trending on Social Media
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {marketPulse.trending_details?.map((ticker) => (
-              <div key={ticker.symbol} className="border rounded-lg p-4">
+        {/* Market Overview */}
+        <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
+          <h3 className="text-lg font-semibold text-white mb-4">Market Overview</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <p className="text-sm text-slate-400 mb-2">Market Sentiment</p>
+              <div className="flex items-center gap-3">
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
+                  marketPulse.market_sentiment.overall_score > 60 
+                    ? 'bg-emerald-500' 
+                    : marketPulse.market_sentiment.overall_score < 40
+                    ? 'bg-red-500'
+                    : 'bg-yellow-500'
+                }`}>
+                  <span className="text-xl font-bold text-white">
+                    {marketPulse.market_sentiment.overall_score}
+                  </span>
+                </div>
+                <div>
+                  <p className="font-medium text-white">
+                    {marketPulse.market_sentiment.sentiment}
+                  </p>
+                  <p className="text-sm text-slate-400">
+                    {marketPulse.market_sentiment.trend}
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div>
+              <p className="text-sm text-slate-400 mb-2">Volatility Index</p>
+              <p className="text-2xl font-bold text-white">
+                {marketPulse.volatility_index.vix}
+              </p>
+              <p className={`text-sm ${
+                marketPulse.volatility_index.level === 'High' 
+                  ? 'text-red-400' 
+                  : marketPulse.volatility_index.level === 'Low'
+                  ? 'text-emerald-400'
+                  : 'text-yellow-400'
+              }`}>
+                {marketPulse.volatility_index.level} - {marketPulse.volatility_index.interpretation}
+              </p>
+            </div>
+            
+            <div>
+              <p className="text-sm text-slate-400 mb-2">Market Trend</p>
+              <div className="flex items-center gap-2">
+                {marketPulse.market_sentiment.overall_score > 50 ? (
+                  <TrendingUp className="text-emerald-400" size={24} />
+                ) : (
+                  <TrendingDown className="text-red-400" size={24} />
+                )}
+                <span className="text-lg font-medium text-white">
+                  {marketPulse.market_sentiment.overall_score > 60 
+                    ? 'Bullish' 
+                    : marketPulse.market_sentiment.overall_score < 40
+                    ? 'Bearish'
+                    : 'Neutral'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Trending Risks */}
+        <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
+          <h3 className="text-lg font-semibold text-white mb-4">Trending Market Risks</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {marketPulse.trending_risks.map((risk, idx) => (
+              <div key={idx} className="flex items-start gap-3 p-4 bg-slate-700 rounded-lg">
+                <AlertTriangle className={`mt-1 ${
+                  risk.severity === 'High' 
+                    ? 'text-red-400' 
+                    : risk.severity === 'Medium'
+                    ? 'text-yellow-400'
+                    : 'text-blue-400'
+                }`} size={20} />
+                <div>
+                  <h4 className="font-medium text-white">{risk.risk}</h4>
+                  <p className="text-sm text-slate-300 mt-1">{risk.description}</p>
+                  <p className="text-xs text-slate-400 mt-2">Impact: {risk.impact}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Hot Tickers */}
+        <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
+          <h3 className="text-lg font-semibold text-white mb-4">Market Movers</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {marketPulse.hot_tickers.map((ticker, idx) => (
+              <div key={idx} className="p-4 bg-slate-700 rounded-lg">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="font-semibold text-lg">{ticker.symbol}</p>
-                  <span className={`px-2 py-1 rounded text-xs font-medium text-white ${
-                    ticker.risk_level === 'Extreme' ? 'bg-red-500' :
-                    ticker.risk_level === 'High' ? 'bg-orange-500' :
-                    ticker.risk_level === 'Moderate' ? 'bg-yellow-500' :
-                    'bg-green-500'
+                  <h4 className="font-bold text-lg text-white">{ticker.symbol}</h4>
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                    ticker.risk_level === 'Extreme' ? 'bg-red-500 text-white' :
+                    ticker.risk_level === 'High' ? 'bg-orange-500 text-white' :
+                    ticker.risk_level === 'Moderate' ? 'bg-yellow-500 text-black' :
+                    'bg-emerald-500 text-white'
                   }`}>
                     {ticker.risk_level} Risk
                   </span>
                 </div>
-                <p className="text-gray-600">
+                <p className="text-slate-300">
                   Price: {formatCurrency(ticker.current_price)}
                 </p>
-                <p className="text-gray-600">
+                <p className="text-slate-300">
                   Volatility: {formatPercent(ticker.volatility)}
                 </p>
               </div>
@@ -444,28 +406,28 @@ export default function PortfolioGuardian() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800">
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2 flex items-center justify-center gap-3">
-            <Shield className="text-blue-600" size={40} />
+          <h1 className="text-4xl font-bold text-white mb-2 flex items-center justify-center gap-3">
+            <Shield className="text-emerald-400" size={40} />
             Portfolio Guardian
           </h1>
-          <p className="text-gray-600 text-lg">
+          <p className="text-slate-300 text-lg">
             AI-powered portfolio protection and risk alerts
           </p>
         </div>
 
         {/* Navigation */}
         <div className="flex justify-center mb-8">
-          <div className="bg-white rounded-lg p-1 shadow-md">
+          <div className="bg-slate-800 rounded-lg p-1 shadow-md border border-slate-700">
             <button
               onClick={() => setActiveView('overview')}
               className={`px-6 py-3 rounded-md transition-all ${
                 activeView === 'overview' 
-                  ? 'bg-blue-600 text-white shadow-md' 
-                  : 'text-gray-600 hover:text-blue-600'
+                  ? 'bg-emerald-500 text-white shadow-md' 
+                  : 'text-slate-300 hover:text-white hover:bg-slate-700'
               }`}
             >
               Overview
@@ -474,8 +436,8 @@ export default function PortfolioGuardian() {
               onClick={() => setActiveView('market')}
               className={`px-6 py-3 rounded-md transition-all ${
                 activeView === 'market' 
-                  ? 'bg-blue-600 text-white shadow-md' 
-                  : 'text-gray-600 hover:text-blue-600'
+                  ? 'bg-emerald-500 text-white shadow-md' 
+                  : 'text-slate-300 hover:text-white hover:bg-slate-700'
               }`}
             >
               Market Pulse
@@ -486,24 +448,24 @@ export default function PortfolioGuardian() {
         {/* Portfolio Management */}
         {activeView === 'overview' && (
           <div className="max-w-4xl mx-auto mb-6">
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Your Portfolio</h3>
+            <div className="bg-slate-800 rounded-lg shadow-lg p-6 border border-slate-700">
+              <h3 className="text-lg font-semibold text-white mb-4">Your Portfolio</h3>
               
               {/* Current Positions */}
               <div className="space-y-2 mb-4">
                 {portfolio.map((position, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded">
+                  <div key={index} className="flex items-center justify-between p-3 bg-slate-700 rounded">
                     <div>
-                      <span className="font-medium">{position.symbol}</span>
-                      <span className="text-sm text-gray-600 ml-2">
+                      <span className="font-medium text-white">{position.symbol}</span>
+                      <span className="text-sm text-slate-300 ml-2">
                         {position.shares} shares @ {formatCurrency(position.purchase_price)}
                       </span>
                     </div>
                     <button
                       onClick={() => removePosition(index)}
-                      className="text-red-500 hover:text-red-700"
+                      className="text-red-400 hover:text-red-300"
                     >
-                      <Trash2 size={18} />
+                      <Trash2 size={16} />
                     </button>
                   </div>
                 ))}
@@ -516,54 +478,154 @@ export default function PortfolioGuardian() {
                   placeholder="Symbol"
                   value={newPosition.symbol}
                   onChange={(e) => setNewPosition({...newPosition, symbol: e.target.value})}
-                  className="flex-1 px-3 py-2 border rounded"
+                  className="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400"
                 />
                 <input
                   type="number"
                   placeholder="Shares"
                   value={newPosition.shares}
                   onChange={(e) => setNewPosition({...newPosition, shares: e.target.value})}
-                  className="w-24 px-3 py-2 border rounded"
+                  className="w-24 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400"
                 />
                 <input
                   type="number"
                   placeholder="Price"
                   value={newPosition.purchase_price}
                   onChange={(e) => setNewPosition({...newPosition, purchase_price: e.target.value})}
-                  className="w-24 px-3 py-2 border rounded"
+                  className="w-24 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-slate-400"
                 />
                 <button
                   onClick={addPosition}
-                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  className="px-4 py-2 bg-emerald-500 text-white rounded hover:bg-emerald-600 transition-all"
                 >
-                  <Plus size={20} />
+                  <Plus size={16} />
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Error Message */}
+        {/* Error Display */}
         {error && (
           <div className="max-w-4xl mx-auto mb-6">
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
-              <AlertCircle className="text-red-500" size={20} />
-              <span className="text-red-700">{error}</span>
+            <div className="bg-red-900/20 border border-red-500 rounded-lg p-4 flex items-center gap-3">
+              <AlertCircle className="text-red-400" size={24} />
+              <p className="text-red-300">{error}</p>
             </div>
           </div>
         )}
 
-        {/* Main Content */}
-        {loading ? (
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        {/* Main Content Area */}
+        <div className="max-w-6xl mx-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-400 mx-auto mb-4"></div>
+                <p className="text-slate-300">Analyzing portfolio...</p>
+              </div>
+            </div>
+          ) : activeView === 'overview' ? (
+            <OverviewView />
+          ) : (
+            <MarketPulseView />
+          )}
+        </div>
+
+        {/* Position Detail Modal */}
+        {selectedPosition && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-900 rounded-2xl p-8 max-w-4xl w-full border border-slate-700 relative max-h-[90vh] overflow-y-auto">
+              <button 
+                onClick={() => setSelectedPosition(null)}
+                className="absolute top-6 right-6 text-slate-400 hover:text-white"
+              >
+                <X size={24} />
+              </button>
+              
+              <h3 className="text-2xl font-bold text-white mb-6">
+                {selectedPosition.symbol} Analysis
+              </h3>
+              
+              {/* Risk Overview */}
+              <div className="grid grid-cols-2 gap-6 mb-6">
+                <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
+                  <h4 className="text-lg font-medium text-white mb-4">Risk Metrics</h4>
+                  <div className="space-y-3">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Volatility</span>
+                      <span className="text-white font-medium">
+                        {formatPercent(selectedPosition.risk_metrics.volatility)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Beta</span>
+                      <span className="text-white font-medium">
+                        {selectedPosition.risk_metrics.beta.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Sharpe Ratio</span>
+                      <span className="text-white font-medium">
+                        {selectedPosition.risk_metrics.sharpe_ratio.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Max Drawdown</span>
+                      <span className="text-red-400 font-medium">
+                        {formatPercent(selectedPosition.risk_metrics.max_drawdown)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-slate-800 rounded-lg p-6 border border-slate-700">
+                  <h4 className="text-lg font-medium text-white mb-4">Sentiment Analysis</h4>
+                  <div className="space-y-3">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">News Sentiment</span>
+                      <span className={`font-medium ${
+                        selectedPosition.sentiment_data.news_sentiment.score > 0
+                          ? 'text-emerald-400'
+                          : 'text-red-400'
+                      }`}>
+                        {selectedPosition.sentiment_data.news_sentiment.score > 0 ? 'Positive' : 'Negative'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Social Sentiment</span>
+                      <span className={`font-medium ${
+                        selectedPosition.sentiment_data.social_sentiment.score > 0
+                          ? 'text-emerald-400'
+                          : 'text-red-400'
+                      }`}>
+                        {selectedPosition.sentiment_data.social_sentiment.score > 0 ? 'Positive' : 'Negative'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Overall Score</span>
+                      <span className="text-white font-medium">
+                        {selectedPosition.sentiment_data.overall_sentiment.score}/100
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Alerts for this position */}
+              {selectedPosition.alerts?.length > 0 && (
+                <div className="bg-red-900/20 rounded-lg p-6 border border-red-500 mb-6">
+                  <h4 className="text-lg font-medium text-red-400 mb-3">Active Alerts</h4>
+                  <ul className="space-y-2">
+                    {selectedPosition.alerts.map((alert, idx) => (
+                      <li key={idx} className="text-white">
+                        • {alert.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           </div>
-        ) : (
-          <>
-            {activeView === 'overview' && <OverviewView />}
-            {activeView === 'position' && <PositionDetailView />}
-            {activeView === 'market' && <MarketPulseView />}
-          </>
         )}
       </div>
     </div>

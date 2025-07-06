@@ -4,8 +4,10 @@ import os
 import sys
 import json
 import logging
-from datetime import datetime
 import requests
+from datetime import datetime
+
+API_URL = "http://localhost:5040/api"
 
 # Set up logging
 logging.basicConfig(
@@ -14,11 +16,38 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
+
+def check_alerts():
+    try:
+        response = requests.get(f"{API_URL}/check-volatility-alerts")
+        data = response.json()
+        
+        if data.get('alerts'):
+            print(f"\n🚨 ALERTS FOUND at {datetime.now()}")
+            for alert in data['alerts']:
+                print(f"\n{alert['symbol']} - {alert['severity']}")
+                print(alert['message'])
+                print("-" * 50)
+        else:
+            print(f"✅ No alerts at {datetime.now()}")
+            
+    except Exception as e:
+        print(f"Error checking alerts: {e}")
+
+if __name__ == "__main__":
+    print("Starting portfolio monitor...")
+    print("Checking every 30 minutes...")
+    
+    while True:
+        check_alerts()
+        time.sleep(30 * 60)  # Check every 30 minutes
+        
+        
 def check_user_portfolio(user_data):
     """Check one user's portfolio for alerts"""
     try:
         # Check volatility
-        response = requests.get('http://localhost:5040/api/check-volatility-alerts')
+        response = requests.get(f"{API_URL}/check-volatility-alerts")
         data = response.json()
         
         if data.get('alerts') and user_data.get('email'):

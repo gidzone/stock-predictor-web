@@ -18,3 +18,7 @@ yfinance==0.2.18  # For ticker validation
 # Additional dependencies for backtesting
 scipy>=1.14.0
 matplotlib>=3.8.0
+
+flask-mail==0.9.1
+gunicorn==20.1.0
+APScheduler==3.10.1
